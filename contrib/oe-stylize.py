@@ -9,8 +9,6 @@ MIT license
 
 TODO:
  - add the others OpenEmbedded variables commonly used:
- - parse command arguments and print usage on misuse
-    . prevent giving more than one .bb file in arguments
  - write result to a file
  - backup the original .bb file
  - make a diff and ask confirmation for patching ?
@@ -20,7 +18,9 @@ TODO:
 """
 
 from __future__ import print_function
+import argparse
 import fileinput
+import os
 import string
 import re
 import sys
@@ -214,11 +214,6 @@ OE_vars = [
 varRegexp = r'^([a-zA-Z_0-9${}:-]*)([ \t]*)([+.:]?=[+.]?)([ \t]*)([^\t]+)'
 routineRegexp = r'^([a-zA-Z0-9_ ${}:-]+?)\('
 
-# Variables seen in the processed .bb
-seen_vars = {}
-for v in OE_vars:
-    seen_vars[v] = []
-
 # _Format guideline #0_:
 #   No spaces are allowed at the beginning of lines that define a variable or
 #   a do_ routine
@@ -355,11 +350,16 @@ def follow_rule(i, line):
     return line
 
 
-if __name__ == "__main__":
+def process_file(filename):
+    print("## Processing \"%s\"" % filename, file=sys.stderr)
+    # Variables seen in the processed .bb
+    seen_vars = {}
+    for v in OE_vars:
+        seen_vars[v] = []
 
     # -- retrieves the lines of the .bb file --
     lines = []
-    for line in fileinput.input():
+    for line in open(filename).readlines():
         # use 'if True' to warn user about all the rule he/she breaks
         # use 'if False' to conform to rules{2,1,6} without warnings
         if True:
@@ -450,5 +450,27 @@ if __name__ == "__main__":
             for s in seen_vars[k]:
                 olines.append(s)
             previourVarPrefix = k.split('_')[0] == '' and "unknown" or k.split('_')[0]
+
     for line in olines:
         print(line)
+
+def process_path(pathname):
+  if os.path.isdir(pathname):
+      for root, dirs, files in os.walk(pathname):
+            for name in files:
+                if name.endswith(".bb") or name.endswith(".bbappend"):
+                    filepath = os.path.join(root, name)
+                    process_file(filepath)
+  else:
+      process_file(filepath)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Stylize bitbake recipes')
+    parser.add_argument('files', metavar='FILE', type=str, nargs='+',
+                        help='File(s) to process')
+
+    args = parser.parse_args()
+
+    for filename in args.files:
+        process_path(filename, args.inplace)
+
