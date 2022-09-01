@@ -9,7 +9,6 @@ MIT license
 
 TODO:
  - add the others OpenEmbedded variables commonly used:
- - write result to a file
  - backup the original .bb file
  - make a diff and ask confirmation for patching ?
  - do not use startswith only:
@@ -350,7 +349,7 @@ def follow_rule(i, line):
     return line
 
 
-def process_file(filename):
+def process_file(filename, write_result):
     print("## Processing \"%s\"" % filename, file=sys.stderr)
     # Variables seen in the processed .bb
     seen_vars = {}
@@ -450,22 +449,29 @@ def process_file(filename):
             for s in seen_vars[k]:
                 olines.append(s)
             previourVarPrefix = k.split('_')[0] == '' and "unknown" or k.split('_')[0]
+    if write_result:
+        with open(filename, 'w') as ofile:
+            for line in olines:
+              ofile.write(line + '\n')
+    else:
+        for line in olines:
+            print(line)
 
-    for line in olines:
-        print(line)
-
-def process_path(pathname):
+def process_path(pathname, write_result):
   if os.path.isdir(pathname):
       for root, dirs, files in os.walk(pathname):
             for name in files:
                 if name.endswith(".bb") or name.endswith(".bbappend"):
                     filepath = os.path.join(root, name)
-                    process_file(filepath)
+                    process_file(filepath, write_result)
   else:
-      process_file(filepath)
+      process_file(pathname, write_result)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Stylize bitbake recipes')
+    parser.add_argument('-i', '--inplace',
+                        action='store_true',
+                        help='Write the result back to the file')
     parser.add_argument('files', metavar='FILE', type=str, nargs='+',
                         help='File(s) to process')
 
