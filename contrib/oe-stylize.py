@@ -444,7 +444,7 @@ def process_file(filename, write_result):
         if k == 'SRC_URI':
             addEmptyLine = True
         if seen_vars[k] != []:
-            if addEmptyLine and not k.startswith(previourVarPrefix):
+            if addEmptyLine and not k.startswith(previourVarPrefix) and olines:
                 olines.append("")
             for s in seen_vars[k]:
                 olines.append(s)
