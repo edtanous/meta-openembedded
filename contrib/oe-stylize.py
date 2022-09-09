@@ -18,6 +18,7 @@ TODO:
 
 from __future__ import print_function
 import argparse
+import bisect
 import fileinput
 import os
 import string
@@ -210,6 +211,16 @@ OE_vars = [
     'others'
 ]
 
+list_keys_to_sort = [
+    'RDEPENDS',
+    'DEPENDS',
+    'PACKAGE_BEFORE_PN',
+    'PACKAGECONFIG',
+    'SYSTEMD_SERVICE',
+    'DBUS_SERVICE',
+    'FILES',
+]
+
 varRegexp = r'^([a-zA-Z_0-9${}:-]*)([ \t]*)([+.:]?=[+.]?)([ \t]*)([^\t]+)'
 routineRegexp = r'^([a-zA-Z0-9_ ${}:-]+?)\('
 
@@ -375,6 +386,7 @@ def process_file(filename, write_result):
     # -- parse the file --
     var = ""
     in_routine = False
+    in_continuation = False
     commentBloc = []
     olines = []
     for line in lines:
@@ -395,21 +407,45 @@ def process_file(filename, write_result):
 
         if line.startswith('}'):
             in_routine = False
+
         keep = line.endswith('\\') or in_routine
 
         # handles commented lines
         if line.lstrip().startswith('#'):
-            # check and follow rule3 if not in a variables or routines
-            if not in_routine:
-                line = follow_rule(3, line)
-            commentBloc.append(line)
-            continue
+          if line.lstrip().startswith('# oe-stylize ignore'):
+            print("## Warning: ignoring file \"%s\"" % filename, file=sys.stderr)
+            return
+          # check and follow rule3 if not in a variables or routines
+          if not in_routine:
+              line = follow_rule(3, line)
+          commentBloc.append(line)
+          continue
 
         if var in seen_vars:
+            num_comments = len(commentBloc)
             for c in commentBloc:
                 seen_vars[var].append(c)
             commentBloc = []
-            seen_vars[var].append(line)
+            if in_continuation and var in list_keys_to_sort:
+                # ensure consistent tabbing
+                line = " " * 4 + line.lstrip()
+                finish_quote = False
+                if line.endswith("\""):
+                  line = line[:-1] + " \\"
+                  finish_quote = True
+                if line.lstrip() and line.lstrip() != "\\":
+                  insert_index = len(seen_vars[var]) - 1
+                  while insert_index != 0:
+                    if seen_vars[var][insert_index].lstrip().startswith(var):
+                      break
+                    if seen_vars[var][insert_index] < line:
+                      break
+                    insert_index -= 1
+                  seen_vars[var].insert(insert_index + 1, line)
+                if finish_quote:
+                  seen_vars[var].append("\"")
+            else:
+              seen_vars[var].append(line)
         else:
             for k in OE_vars:
                 if line.startswith(k):
@@ -429,7 +465,11 @@ def process_file(filename, write_result):
             for c in commentBloc:
                 seen_vars[var].append(c)
             commentBloc = []
+
             seen_vars[var].append(line)
+
+        in_continuation = line.endswith('\\')
+
         if not keep and not in_routine:
             var = ""
 
